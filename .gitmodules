@@ -1,0 +1,6 @@
+[submodule "ext/eigen"]
+	path = ext/eigen
+	url = https://github.com/libigl/eigen
+[submodule "ext/glfw"]
+	path = ext/glfw
+	url = https://github.com/wjakob/glfw/
