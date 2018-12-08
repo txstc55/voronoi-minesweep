@@ -46,7 +46,8 @@ std::vector<Eigen::Matrix3Xf> cell_center_squares;
 std::map<int, std::set<int> > neighbors;
 std::set<int> mine_cells;
 std::map<int, int> neighbor_mines;
-
+std::vector<Eigen::Vector3f> cell_colors;
+std::vector<Eigen::Vector3f> cell_complementary_colors;
 
 
 int left_clicked_cell = -1;
@@ -57,6 +58,24 @@ std::set<int> opened_cell;
 bool game_over = false;
 std::set<int> flagged_cells;
 int cursor_position_cell = -1;
+bool win_game = false;
+auto t_now= std::chrono::high_resolution_clock::now();
+auto t_start = std::chrono::high_resolution_clock::now();
+int finish_time;
+
+
+
+
+
+std::vector<Eigen::Matrix3Xf> all_numbers_edges;
+std::vector<float> all_numbers_width;
+std::vector<std::vector<Eigen::Vector3f> > number_centers_for_each_cell;
+std::vector<std::vector<float> > each_number_size_for_each_cell;
+std::string command = "python ../src/voronoi.py ";	
+std::string file = "../src/voronoi_data";
+
+
+
 
 
 // Properties
@@ -188,6 +207,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 						if (mine_cells.find(ind)!=mine_cells.end() ){
 							game_over = true;
+							win_game = false;
+							finish_time = (int)std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
 
 						}else{
 							std::cout<<"Not flagged"<<std::endl;
@@ -317,6 +338,8 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 	if (flagged_cells.size() + opened_cell.size() == num_of_cells){
 		game_over = true;
+		win_game = true;
+		finish_time = (int)std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
 	}
 
 
@@ -369,6 +392,107 @@ void mouse_cursor_position_callback(GLFWwindow* window, double xpos, double ypos
 
 
 }
+
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    switch (key)
+    {	
+    	case GLFW_KEY_R:
+
+    	// reset the game
+    		if (action==GLFW_RELEASE){
+				std::cout<<"Please enter number of cells"<<std::endl;
+				
+				std::cin>>num_of_cells;
+
+				while (num_of_cells<=0){
+					std::cout<<"The number of cells must be greater than 0, please enter another number"<<std::endl;
+					std::cin>>num_of_cells;
+				}
+
+				command = "python ../src/voronoi.py ";
+				command+= std::to_string(num_of_cells);
+				system(command.c_str());
+
+				std::cout<<"Please enter the number mines in this game"<<std::endl;
+				std::cin>>number_of_mines;
+				while(number_of_mines > 0.4 * num_of_cells || number_of_mines<=0){
+					std::cout<<"The number of mines must be a positive number and cannot be greater than 40\% number of cells, please enter another number"<<std::endl;
+					std::cin>>number_of_mines;
+				}
+				cells.clear();
+				cell_centers.clear();
+				cell_center_squares.clear();
+				neighbors.clear();
+				mine_cells.clear();
+				neighbor_mines.clear();
+				cell_colors.clear();
+				cell_complementary_colors.clear();
+				number_centers_for_each_cell.clear();
+				each_number_size_for_each_cell.clear();
+
+				load_voronoi(file, 
+							  number_of_mines, 
+							  cells, 
+							  cell_centers,
+							  cell_center_squares,
+							  neighbors, 
+							  mine_cells, 
+							  neighbor_mines,
+							  square_cell_maps);
+
+				square_cell_partition = (int)floor(cbrt(cell_centers.size()));
+
+
+				for (int i=0; i<cells.size(); i++){
+					cell_colors.push_back(Eigen::Vector3f(RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0)));
+					cell_complementary_colors.push_back(complementary_color(cell_colors[i]));
+				}
+
+				for (int i=0; i<num_of_cells; i++){
+					std::vector<Eigen::Vector3f> number_centers;
+					std::vector<float> each_number_size;
+					int mine_number = neighbor_mines[i];
+
+					getNumberCenterSize(cell_center_squares[i], 
+											 mine_number, 
+											 cell_centers[i], 
+											 number_centers, 
+											 each_number_size, 
+											 all_numbers_width);
+					number_centers_for_each_cell.push_back(number_centers);
+					each_number_size_for_each_cell.push_back(each_number_size);
+
+
+
+					left_clicked_cell = -1;
+					right_clicked_cell = -1;
+					left_button_down = 0;
+					right_button_down = 0;
+					opened_cell.clear();
+					game_over = false;
+					flagged_cells.clear();
+					cursor_position_cell = -1;
+					win_game = false;
+
+					t_start = std::chrono::high_resolution_clock::now();
+					finish_time = 0;
+				}
+
+
+				break;	
+    		}
+
+
+    	default:
+    		break;
+    }
+
+
+
+}
+
 
 
 
@@ -522,29 +646,10 @@ int main()
 	vao.bind();
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
-	// get the number of cells and store it in voronoi_data
 
-	std::string command = "python ../src/voronoi.py ";
-	std::cout<<"Please enter number of cells"<<std::endl;
-	
-	std::cin>>num_of_cells;
-
-	while (num_of_cells<=0){
-		std::cout<<"The number of cells must be greater than 0, please enter another number"<<std::endl;
-		std::cin>>num_of_cells;
-	}
-	
-
-	command+= std::to_string(num_of_cells);
-	system(command.c_str());
-
-
-
-	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	// load numbers and draw numbers
-	std::vector<Eigen::Matrix3Xf> all_numbers_edges;
-	std::vector<float> all_numbers_width;
+
 
 	load_all_number(all_numbers_edges, all_numbers_width);
 
@@ -572,10 +677,40 @@ int main()
 					"    outColor = vec4(f_color, 1.0);"
 					"}";
 
+	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// load mines and flags
+	Eigen::Matrix3Xf mine_edges;
+	load_shape("../objects/mine.off", mine_edges);
+
+	Eigen::Matrix3Xf flag_edges;
+	load_shape("../objects/flag.off", flag_edges);
+
+
+
+
+	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	// get the number of cells and store it in voronoi_data
+
+
+	std::cout<<"Please enter number of cells"<<std::endl;
+	
+	std::cin>>num_of_cells;
+
+	while (num_of_cells<=0){
+		std::cout<<"The number of cells must be greater than 0, please enter another number"<<std::endl;
+		std::cin>>num_of_cells;
+	}
+	
+
+	command+= std::to_string(num_of_cells);
+	system(command.c_str());
+
+
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	// load voronoi
-	std::string file = "../src/voronoi_data";
+	
 	
 	std::cout<<"Please enter the number mines in this game"<<std::endl;
 	std::cin>>number_of_mines;
@@ -598,43 +733,23 @@ int main()
 				  square_cell_maps);
 
 	square_cell_partition = (int)floor(cbrt(cell_centers.size()));
-	std::vector<Eigen::Vector3f> cell_colors;
-	std::vector<Eigen::Vector3f> cell_complementary_colors;
+
 
 	for (int i=0; i<cells.size(); i++){
 		cell_colors.push_back(Eigen::Vector3f(RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0)));
 		cell_complementary_colors.push_back(complementary_color(cell_colors[i]));
 	}
-	// for (auto it = square_cell_maps.begin(); it!=square_cell_maps.end(); ++it){
-	// 	std::cout<<it->first<<std::endl;
-	// 	std::set<int> cell_index = it->second;
-	// 	for (auto its = cell_index.begin(); its!=cell_index.end(); ++its){
-	// 		std::cout<<(*its)<<" ";
-	// 	}
-	// 	std::cout<<std::endl;
-	// }
-
-	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
-	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
-	// load mines and flags
-	Eigen::Matrix3Xf mine_edges;
-	load_shape("../objects/mine.off", mine_edges);
-
-	Eigen::Matrix3Xf flag_edges;
-	load_shape("../objects/flag.off", flag_edges);
-
-
 
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
-	auto t_start = std::chrono::high_resolution_clock::now();
+	
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 
 
-	std::vector<std::vector<Eigen::Vector3f> > number_centers_for_each_cell;
-	std::vector<std::vector<float> > each_number_size_for_each_cell;
+
 	for (int i=0; i<num_of_cells; i++){
 		std::vector<Eigen::Vector3f> number_centers;
 		std::vector<float> each_number_size;
@@ -650,6 +765,9 @@ int main()
 		each_number_size_for_each_cell.push_back(each_number_size);
 
 	}
+
+	glfwSetKeyCallback(window, key_callback);
+	t_start = std::chrono::high_resolution_clock::now();
 
 
 
@@ -701,11 +819,19 @@ int main()
 		Eigen::Vector3f text_color = complementary_color(background);
 
 
-		auto t_now = std::chrono::high_resolution_clock::now();
+		t_now = std::chrono::high_resolution_clock::now();
 		int time = (int)std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
 		glDisable(GL_DEPTH_TEST);
-		RenderText(shader, "Time taken: "+std::to_string(time), 1, height-30, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
+		RenderText(shader, "Time passed: "+std::to_string(time), 1, height-30, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
 		RenderText(shader, "Flags left: "+std::to_string(number_of_mines - flagged_cells.size()), 1, height-60, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
+		if (game_over){
+			if (win_game){
+				RenderText(shader, "You won using:", 1, height-90, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
+				RenderText(shader, std::to_string(finish_time) + " seconds", 1, height-120, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
+			}else{
+				RenderText(shader, "Lost!", 1, height-90, 0.5, glm::vec3(text_color(0), text_color(1), text_color(2)));
+			}
+		}
 
 		// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 		// draw items
