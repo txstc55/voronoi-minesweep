@@ -20,7 +20,7 @@
 // Timer
 #include <chrono>
 
-
+#define PI 3.14159265
 
 
 Eigen::Vector3f background = Eigen::Vector3f(211.0/255.0, 219.0/255.0, 229.0/255.0);
@@ -36,6 +36,8 @@ Eigen::Matrix4Xf camera_matrix(4, 4);
 Eigen::Matrix4Xf projection_matrix(4, 4);
 float camera_scale = 1.0;
 
+
+// square mine grid elements
 int num_of_cells;
 int number_of_mines;
 std::map<int, std::set<int> > square_cell_maps;
@@ -46,10 +48,28 @@ std::vector<Eigen::Matrix3Xf> cell_center_squares;
 std::map<int, std::set<int> > neighbors;
 std::set<int> mine_cells;
 std::map<int, int> neighbor_mines;
+
+
 std::vector<Eigen::Vector3f> cell_colors;
 std::vector<Eigen::Vector3f> cell_complementary_colors;
 
 
+// sphere mine variables
+
+std::vector<Eigen::Matrix3Xf> spherical_cells; 
+std::vector<Eigen::Vector3f> spherical_cell_centers;
+std::vector<Eigen::Vector3f> spherical_cell_centers_unnormed;
+std::vector<Eigen::Matrix3Xf> spherical_cell_triangles;
+std::vector<Eigen::Matrix3Xf> sphere_center_squares;
+std::set<int> spherical_mine_cells;
+std::map<int, int> spherical_neighbor_mines;
+std::map<int, std::set<int> > spherical_layer_maps;
+
+
+
+
+
+// game variables
 int left_clicked_cell = -1;
 int right_clicked_cell = -1;
 int left_button_down = 0;
@@ -62,19 +82,32 @@ bool win_game = false;
 auto t_now= std::chrono::high_resolution_clock::now();
 auto t_start = std::chrono::high_resolution_clock::now();
 int finish_time;
+char choice;
 
 
 
-
-
+// nu,ber variables
 std::vector<Eigen::Matrix3Xf> all_numbers_edges;
 std::vector<float> all_numbers_width;
 std::vector<std::vector<Eigen::Vector3f> > number_centers_for_each_cell;
 std::vector<std::vector<float> > each_number_size_for_each_cell;
+
+
+// predefined commands
 std::string command = "python ../src/voronoi.py ";	
 std::string file = "../src/voronoi_data";
 
+std::string sphere_command = "python ../src/spherical_voronoi.py ";
+std::string sphere_file = "../src/spherical_voronoi_data";
 
+
+
+//global settings
+float ry = 0;
+float rx = 0;
+float x_position_last = 0;
+float y_position_last = 0;
+Eigen::Matrix4Xf rotation;
 
 
 
@@ -394,6 +427,223 @@ void mouse_cursor_position_callback(GLFWwindow* window, double xpos, double ypos
 }
 
 
+void sphere_mouse_button_callback(GLFWwindow* window, int button, int action, int mods){
+
+	double xpos, ypos;
+	glfwGetCursorPos(window, &xpos, &ypos);
+
+	// Get the size of the window
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
+
+	// Convert screen position to world coordinates
+
+	Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+	Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1, -2,1);
+	Eigen::Vector4f p_world = (view* projection_matrix* camera_matrix).inverse()*p_canonical;
+	double xworld = p_world[0];
+	double yworld = p_world[1];
+	x_position_last = xworld;
+	y_position_last = yworld;
+
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS){
+		left_button_down = 1;
+
+		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+			float t_min = 2;
+			for (int i=0; i<spherical_cells.size(); i++){
+
+				Eigen::Vector4f c = rotation * Eigen::Vector4f(spherical_cell_centers_unnormed[i](0), spherical_cell_centers_unnormed[i](1), spherical_cell_centers_unnormed[i](2), 1.0);
+				// std::cout<<c<<std::endl;
+				Eigen::Vector3f p = Eigen::Vector3f(xworld, yworld, sqrt(1 - pow(xworld, 2) - pow(yworld, 2)));
+				Eigen::Vector3f ct = Eigen::Vector3f(c(0), c(1), c(2));
+				// std::cout<<ct<<std::endl;
+				float t = (p - ct).norm();
+				if (t<t_min){
+					t_min = t;
+					left_clicked_cell = i;
+				}
+			}
+
+		}else{
+			left_clicked_cell = -1;
+		}
+
+	}
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE){
+		left_button_down = 0;
+		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+			int ind = 2;
+			float t_min = 2;
+			for (int i=0; i<spherical_cells.size(); i++){
+
+				Eigen::Vector4f c = rotation * Eigen::Vector4f(spherical_cell_centers_unnormed[i](0), spherical_cell_centers_unnormed[i](1), spherical_cell_centers_unnormed[i](2), 1.0);
+				// std::cout<<c<<std::endl;
+				Eigen::Vector3f p = Eigen::Vector3f(xworld, yworld, sqrt(1 - pow(xworld, 2) - pow(yworld, 2)));
+				Eigen::Vector3f ct = Eigen::Vector3f(c(0), c(1), c(2));
+				// std::cout<<ct<<std::endl;
+				float t = (p - ct).norm();
+				if (t<t_min){
+					t_min = t;
+					ind = i;
+				}
+			}
+
+
+			if (ind != left_clicked_cell){
+				left_clicked_cell = -1;
+			}else if (flagged_cells.find(ind) == flagged_cells.end()){
+				if (spherical_mine_cells.find(ind)!=spherical_mine_cells.end()){
+					game_over = true;
+					win_game = false;
+					finish_time = (int)std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+
+				}else{
+					std::cout<<"Not flagged"<<std::endl;
+					std::cout<<"Clicked on spherical cell: "<<ind<<std::endl;
+					std::set<int> should_open = open_cells(ind, spherical_neighbor_mines, spherical_mine_cells, neighbors, flagged_cells);
+					opened_cell.insert(should_open.begin(), should_open.end());
+				}
+			}
+
+		}else{
+			left_clicked_cell = -1;
+		}
+
+	}
+
+	if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS){
+		double xpos, ypos;
+		right_button_down = 1;
+
+
+		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+			float t_min = 2;
+			for (int i=0; i<spherical_cells.size(); i++){
+
+				Eigen::Vector4f c = rotation * Eigen::Vector4f(spherical_cell_centers_unnormed[i](0), spherical_cell_centers_unnormed[i](1), spherical_cell_centers_unnormed[i](2), 1.0);
+				// std::cout<<c<<std::endl;
+				Eigen::Vector3f p = Eigen::Vector3f(xworld, yworld, sqrt(1 - pow(xworld, 2) - pow(yworld, 2)));
+				Eigen::Vector3f ct = Eigen::Vector3f(c(0), c(1), c(2));
+				// std::cout<<ct<<std::endl;
+				float t = (p - ct).norm();
+				if (t<t_min){
+					t_min = t;
+					right_clicked_cell = i;
+				}
+			}
+
+		}else{
+			right_clicked_cell = -1;
+		}
+	}
+
+	if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE){
+		right_button_down = 0;
+		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+			int ind = -2;
+			float t_min = 2;
+			for (int i=0; i<spherical_cells.size(); i++){
+
+				Eigen::Vector4f c = rotation * Eigen::Vector4f(spherical_cell_centers_unnormed[i](0), spherical_cell_centers_unnormed[i](1), spherical_cell_centers_unnormed[i](2), 1.0);
+				// std::cout<<c<<std::endl;
+				Eigen::Vector3f p = Eigen::Vector3f(xworld, yworld, sqrt(1 - pow(xworld, 2) - pow(yworld, 2)));
+				Eigen::Vector3f ct = Eigen::Vector3f(c(0), c(1), c(2));
+				// std::cout<<ct<<std::endl;
+				float t = (p - ct).norm();
+				if (t<t_min){
+					t_min = t;
+					ind = i;
+				}
+			}
+
+
+			if (flagged_cells.find(ind)==flagged_cells.end()){
+				if (flagged_cells.size()<number_of_mines && opened_cell.find(ind) == opened_cell.end()){
+					flagged_cells.insert(ind);
+				}
+				
+
+			}else{
+				flagged_cells.erase(ind);
+			}
+
+		}
+	}
+
+
+
+
+
+
+	if (flagged_cells.size() + opened_cell.size() == num_of_cells){
+		game_over = true;
+		win_game = true;
+		finish_time = (int)std::chrono::duration_cast<std::chrono::duration<float>>(t_now - t_start).count();
+	}
+}
+
+
+
+
+
+
+
+
+
+
+void sphere_mouse_cursor_position_callback(GLFWwindow* window, double xpos, double ypos){
+
+	glfwGetCursorPos(window, &xpos, &ypos);
+
+	// Get the size of the window
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
+
+	// Convert screen position to world coordinates
+
+	Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+	Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1, -2,1);
+	Eigen::Vector4f p_world = (view* projection_matrix* camera_matrix).inverse()*p_canonical;
+	double xworld = p_world[0];
+	double yworld = p_world[1];
+	ry = -(xworld - x_position_last)*PI*10;
+	rx = (yworld - y_position_last)*PI*10;
+
+
+	if (left_button_down){
+		rotation = rotation_scale_matrix(0.0, rx, ry, 1.0, Eigen::Vector3f(0.0, 0.0, 0.0))*rotation;
+		y_position_last = yworld;
+		x_position_last = xworld;
+	}else{
+
+		// here we will just use the property of delaunay triangle
+		// to determine where we clicked
+		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+			float t_min = 2;
+			for (int i=0; i<spherical_cells.size(); i++){
+
+				Eigen::Vector4f c = rotation * Eigen::Vector4f(spherical_cell_centers_unnormed[i](0), spherical_cell_centers_unnormed[i](1), spherical_cell_centers_unnormed[i](2), 1.0);
+				// std::cout<<c<<std::endl;
+				Eigen::Vector3f p = Eigen::Vector3f(xworld, yworld, sqrt(1 - pow(xworld, 2) - pow(yworld, 2)));
+				Eigen::Vector3f ct = Eigen::Vector3f(c(0), c(1), c(2));
+				// std::cout<<ct<<std::endl;
+				float t = (p - ct).norm();
+				if (t<t_min){
+					t_min = t;
+					cursor_position_cell = i;
+				}
+			}
+
+		}else{
+			cursor_position_cell = -1;
+		}
+
+	}
+
+
+}
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     switch (key)
@@ -402,25 +652,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
     	// reset the game
     		if (action==GLFW_RELEASE){
-				std::cout<<"Please enter number of cells"<<std::endl;
-				
-				std::cin>>num_of_cells;
 
-				while (num_of_cells<=0){
-					std::cout<<"The number of cells must be greater than 0, please enter another number"<<std::endl;
-					std::cin>>num_of_cells;
-				}
-
-				command = "python ../src/voronoi.py ";
-				command+= std::to_string(num_of_cells);
-				system(command.c_str());
-
-				std::cout<<"Please enter the number mines in this game"<<std::endl;
-				std::cin>>number_of_mines;
-				while(number_of_mines > 0.4 * num_of_cells || number_of_mines<=0){
-					std::cout<<"The number of mines must be a positive number and cannot be greater than 40\% number of cells, please enter another number"<<std::endl;
-					std::cin>>number_of_mines;
-				}
+    			// clear normal grid cells
 				cells.clear();
 				cell_centers.clear();
 				cell_center_squares.clear();
@@ -432,53 +665,157 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 				number_centers_for_each_cell.clear();
 				each_number_size_for_each_cell.clear();
 
-				load_voronoi(file, 
-							  number_of_mines, 
-							  cells, 
-							  cell_centers,
-							  cell_center_squares,
-							  neighbors, 
-							  mine_cells, 
-							  neighbor_mines,
-							  square_cell_maps);
-
-				square_cell_partition = (int)floor(cbrt(cell_centers.size()));
+				spherical_cells.clear(); 
+				spherical_cell_centers.clear();
+				spherical_cell_centers_unnormed.clear();
+				spherical_cell_triangles.clear();
+				sphere_center_squares.clear();
+				spherical_mine_cells.clear();
+				spherical_neighbor_mines.clear();
+				spherical_layer_maps.clear();
 
 
-				for (int i=0; i<cells.size(); i++){
+
+
+				// clear game related parameters
+				left_clicked_cell = -1;
+				right_clicked_cell = -1;
+				left_button_down = 0;
+				right_button_down = 0;
+				opened_cell.clear();
+				game_over = false;
+				flagged_cells.clear();
+				cursor_position_cell = -1;
+				win_game = false;
+
+				t_start = std::chrono::high_resolution_clock::now();
+				finish_time = 0;
+
+				rx = 0;
+				ry = 0;
+				choice = 'g';
+				x_position_last = 0;
+				y_position_last = 0;
+
+				rotation.resize(4, 4);
+				rotation<<
+				1.0, 0.0, 0.0, 0.0,
+				0.0, 1.0, 0.0, 0.0,
+				0.0, 0.0, 1.0, 0.0,
+				0.0, 0.0, 0.0, 1.0;
+
+
+				command = "python ../src/voronoi.py ";	
+				sphere_command = "python ../src/spherical_voronoi.py ";
+
+				std::cout<<"Please choose between sphere or square grid. Enter g for square grid and anything else for sphere."<<std::endl;
+
+				std::cin>>choice;
+				std::cout<<"Please enter number of cells"<<std::endl;
+				
+				std::cin>>num_of_cells;
+				
+
+				while (num_of_cells<=3){
+					std::cout<<"The number of cells must be greater than 3, please enter another number"<<std::endl;
+					std::cin>>num_of_cells;
+				}
+				
+				if (choice !='g'){
+					sphere_command+=std::to_string(num_of_cells);
+					system(sphere_command.c_str());
+				}else{
+					command+= std::to_string(num_of_cells);
+					system(command.c_str());
+				}
+
+
+
+
+				// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+				// load voronoi
+				
+				
+				std::cout<<"Please enter the number mines in this game"<<std::endl;
+				std::cin>>number_of_mines;
+				while(number_of_mines > 0.4 * num_of_cells || number_of_mines<=0){
+					std::cout<<"The number of mines must be a positive number and cannot be greater than 40\% number of cells, please enter another number"<<std::endl;
+					std::cin>>number_of_mines;
+				}
+
+				
+				if (choice!='g'){
+					// std::cout<<"Number of cells: "<<num_of_cells<<std::endl;
+					load_spherical_voronoi(sphere_file,
+			                            number_of_mines,
+			                            spherical_cells, 
+			                            spherical_cell_triangles,
+			                            spherical_cell_centers,
+			                            spherical_cell_centers_unnormed,
+			                            sphere_center_squares,
+			                            neighbors,
+			                            spherical_mine_cells,
+			                            spherical_neighbor_mines,
+			                            spherical_layer_maps);
+					// std::cout<<"1111111111111111111111111111111111111111"<<std::endl;
+				}else{
+					load_voronoi(file, 
+								  number_of_mines, 
+								  cells, 
+								  cell_centers,
+								  cell_center_squares,
+								  neighbors, 
+								  mine_cells, 
+								  neighbor_mines,
+								  square_cell_maps);
+
+					square_cell_partition = (int)floor(cbrt(cell_centers.size()));
+				}
+				
+
+
+
+				for (int i=0; i<num_of_cells; i++){
 					cell_colors.push_back(Eigen::Vector3f(RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0)));
 					cell_complementary_colors.push_back(complementary_color(cell_colors[i]));
 				}
 
-				for (int i=0; i<num_of_cells; i++){
-					std::vector<Eigen::Vector3f> number_centers;
-					std::vector<float> each_number_size;
-					int mine_number = neighbor_mines[i];
-
-					getNumberCenterSize(cell_center_squares[i], 
-											 mine_number, 
-											 cell_centers[i], 
-											 number_centers, 
-											 each_number_size, 
-											 all_numbers_width);
-					number_centers_for_each_cell.push_back(number_centers);
-					each_number_size_for_each_cell.push_back(each_number_size);
 
 
+				if (choice=='g'){
+					for (int i=0; i<num_of_cells; i++){
+						std::vector<Eigen::Vector3f> number_centers;
+						std::vector<float> each_number_size;
+						int mine_number = neighbor_mines[i];
 
-					left_clicked_cell = -1;
-					right_clicked_cell = -1;
-					left_button_down = 0;
-					right_button_down = 0;
-					opened_cell.clear();
-					game_over = false;
-					flagged_cells.clear();
-					cursor_position_cell = -1;
-					win_game = false;
+						getNumberCenterSize(cell_center_squares[i], 
+												 mine_number, 
+												 cell_centers[i], 
+												 number_centers, 
+												 each_number_size, 
+												 all_numbers_width);
+						number_centers_for_each_cell.push_back(number_centers);
+						each_number_size_for_each_cell.push_back(each_number_size);
 
-					t_start = std::chrono::high_resolution_clock::now();
-					finish_time = 0;
+					}	
+				}else{
+					for (int i=0; i<num_of_cells; i++){
+						std::vector<Eigen::Vector3f> number_centers;
+						std::vector<float> each_number_size;
+						int mine_number = spherical_neighbor_mines[i];
+
+						getNumberCenterSize(sphere_center_squares[i], 
+												 mine_number, 
+												 Eigen::Vector3f(0, 0, 0), 
+												 number_centers, 
+												 each_number_size, 
+												 all_numbers_width);
+						number_centers_for_each_cell.push_back(number_centers);
+						each_number_size_for_each_cell.push_back(each_number_size);
+
+					}
 				}
+				// std::cout<<"222222222222222222222222222222222222222222222222"<<std::endl;
 
 
 				break;	
@@ -663,9 +1000,10 @@ int main()
 					"uniform mat4 view;"
 					"uniform mat4 proj;"
 					"uniform mat4 camera;"
+					"uniform mat4 rot;"
 					"void main()"
 					"{"
-					"    gl_Position = view*proj*camera*(vec4((position + center), 1.0));"
+					"    gl_Position = view*proj*camera*rot*(vec4((position + center), 1.0));"
 					"    f_color = frag_color;"
 					"}";
 	const GLchar* number_fragment_shader =
@@ -692,19 +1030,29 @@ int main()
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 	// get the number of cells and store it in voronoi_data
 
+	std::cout<<"Please choose between sphere or square grid. Enter g for square grid and anything else for sphere."<<std::endl;
+
+	std::cin>>choice;
+
+
 
 	std::cout<<"Please enter number of cells"<<std::endl;
 	
 	std::cin>>num_of_cells;
 
-	while (num_of_cells<=0){
-		std::cout<<"The number of cells must be greater than 0, please enter another number"<<std::endl;
+	while (num_of_cells<=3){
+		std::cout<<"The number of cells must be greater than 3, please enter another number"<<std::endl;
 		std::cin>>num_of_cells;
 	}
 	
+	if (choice !='g'){
+		sphere_command+=std::to_string(num_of_cells);
+		system(sphere_command.c_str());
+	}else{
+		command+= std::to_string(num_of_cells);
+		system(command.c_str());
+	}
 
-	command+= std::to_string(num_of_cells);
-	system(command.c_str());
 
 
 
@@ -720,26 +1068,75 @@ int main()
 	}
 	
 
+	if (choice!='g'){
+		load_spherical_voronoi(sphere_file,
+                            number_of_mines,
+                            spherical_cells, 
+                            spherical_cell_triangles,
+                            spherical_cell_centers,
+                            spherical_cell_centers_unnormed,
+                            sphere_center_squares,
+                            neighbors,
+                            spherical_mine_cells,
+                            spherical_neighbor_mines,
+                            spherical_layer_maps);
+	}else{
+		load_voronoi(file, 
+					  number_of_mines, 
+					  cells, 
+					  cell_centers,
+					  cell_center_squares,
+					  neighbors, 
+					  mine_cells, 
+					  neighbor_mines,
+					  square_cell_maps);
 
+		square_cell_partition = (int)floor(cbrt(cell_centers.size()));
+	}
 	
-	load_voronoi(file, 
-				  number_of_mines, 
-				  cells, 
-				  cell_centers,
-				  cell_center_squares,
-				  neighbors, 
-				  mine_cells, 
-				  neighbor_mines,
-				  square_cell_maps);
-
-	square_cell_partition = (int)floor(cbrt(cell_centers.size()));
 
 
-	for (int i=0; i<cells.size(); i++){
+
+	for (int i=0; i<num_of_cells; i++){
 		cell_colors.push_back(Eigen::Vector3f(RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0), RandomFloat(0.5, 1.0)));
 		cell_complementary_colors.push_back(complementary_color(cell_colors[i]));
 	}
 
+
+
+	if (choice=='g'){
+		for (int i=0; i<num_of_cells; i++){
+			std::vector<Eigen::Vector3f> number_centers;
+			std::vector<float> each_number_size;
+			int mine_number = neighbor_mines[i];
+
+			getNumberCenterSize(cell_center_squares[i], 
+									 mine_number, 
+									 cell_centers[i], 
+									 number_centers, 
+									 each_number_size, 
+									 all_numbers_width);
+			number_centers_for_each_cell.push_back(number_centers);
+			each_number_size_for_each_cell.push_back(each_number_size);
+
+		}	
+	}else{
+		for (int i=0; i<num_of_cells; i++){
+			std::vector<Eigen::Vector3f> number_centers;
+			std::vector<float> each_number_size;
+			int mine_number = spherical_neighbor_mines[i];
+
+			getNumberCenterSize(sphere_center_squares[i], 
+									 mine_number, 
+									 Eigen::Vector3f(0, 0, 0), 
+									 number_centers, 
+									 each_number_size, 
+									 all_numbers_width);
+			number_centers_for_each_cell.push_back(number_centers);
+			each_number_size_for_each_cell.push_back(each_number_size);
+
+		}
+	}
 
 	// ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -750,24 +1147,11 @@ int main()
 
 
 
-	for (int i=0; i<num_of_cells; i++){
-		std::vector<Eigen::Vector3f> number_centers;
-		std::vector<float> each_number_size;
-		int mine_number = neighbor_mines[i];
 
-		getNumberCenterSize(cell_center_squares[i], 
-								 mine_number, 
-								 cell_centers[i], 
-								 number_centers, 
-								 each_number_size, 
-								 all_numbers_width);
-		number_centers_for_each_cell.push_back(number_centers);
-		each_number_size_for_each_cell.push_back(each_number_size);
-
-	}
 
 	glfwSetKeyCallback(window, key_callback);
 	t_start = std::chrono::high_resolution_clock::now();
+	rotation = rotation_scale_matrix(0.0, 0.0, 0.0, 1.0, Eigen::Vector3f(0.0, 0.0, 0.0));
 
 
 
@@ -779,8 +1163,14 @@ int main()
 			glfwSetMouseButtonCallback(window, empty_mouse_button_callback);
 			glfwSetCursorPosCallback(window, empty_mouse_cursor_position_callback);
 		}else{
-			glfwSetMouseButtonCallback(window, mouse_button_callback);
-			glfwSetCursorPosCallback(window, mouse_cursor_position_callback);
+			if (choice == 'g'){
+				glfwSetMouseButtonCallback(window, mouse_button_callback);
+				glfwSetCursorPosCallback(window, mouse_cursor_position_callback);
+			}else{
+				glfwSetMouseButtonCallback(window, sphere_mouse_button_callback);
+				glfwSetCursorPosCallback(window, sphere_mouse_cursor_position_callback);
+			}
+
 		}
 		
 
@@ -837,7 +1227,7 @@ int main()
 		// draw items
 		glEnable(GL_DEPTH_TEST);
 
-		camera_matrix = return_camera_matrix(camera_position, camera_look_up_endpoint, 0.0, 0.0);
+		camera_matrix = return_camera_matrix(return_rotation_matrix(0.0, 0.0, 0.0)*camera_position, return_rotation_matrix(0.0, 0.0, 0.0)*camera_look_up_endpoint, 0.0, 0.0);
 		projection_matrix = return_orth_proj_matrix(1.0, camera_position);
 
 
@@ -847,7 +1237,15 @@ int main()
 		glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data());
 		glUniformMatrix4fv(program.uniform("proj"), 1, GL_FALSE, projection_matrix.data());
 		glUniformMatrix4fv(program.uniform("camera"), 1, GL_FALSE, camera_matrix.data());
-
+		if (choice == 'g'){
+			rotation.resize(4, 4);
+			rotation<<
+			1.0, 0.0, 0.0, 0.0,
+			0.0, 1.0, 0.0, 0.0,
+			0.0, 0.0, 1.0, 0.0,
+			0.0, 0.0, 0.0, 1.0;
+		}
+		glUniformMatrix4fv(program.uniform("rot"), 1, GL_FALSE, rotation.data());
 
 
 
@@ -857,83 +1255,160 @@ int main()
 		vbo_cell.bind();
 
 
-		for (int i=0; i<cells.size(); i++){
-			vbo_cell.update(cells[i]);
-			// std::cout<<i<<std::endl;
-			// std::cout<<cells[i]<<std::endl<<std::endl;
+		if (choice!='g'){
+			for (int i=0; i<spherical_cells.size(); i++){
+				glUniformMatrix4fv(program.uniform("rot"), 1, GL_FALSE, rotation.data());
+				glUniform3f(program.uniform("center"),0.0, 0.0, 0.0);
 
 
-			// draw the cell
-			program.bindVertexAttribArray("position", vbo_cell);
-			glUniform3f(program.uniform("center"),0.0, 0.0, 0.0);
+				if ((left_clicked_cell == i && left_button_down)){
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/3 , cell_colors[i](1)/3 , cell_colors[i](2)/3);
+				}else if (opened_cell.find(i)!=opened_cell.end()){
+					// opened cell
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/2 , cell_colors[i](1)/2 , cell_colors[i](2)/2);
+				}else if (cursor_position_cell!=-1 && neighbors[cursor_position_cell].find(i) != neighbors[cursor_position_cell].end()){
+					// neighbor cell
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0) +0.2, cell_colors[i](1) +0.2, cell_colors[i](2) +0.2);
+				}else if(cursor_position_cell == i){
+					glUniform3f(program.uniform("frag_color"),0.5, 0.5, 0.5);
+				}else{
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0) , cell_colors[i](1) , cell_colors[i](2));
+				}
+				
 
-			// mouse pressed cell
-			if ((left_clicked_cell == i && left_button_down)){
-				glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/3 , cell_colors[i](1)/3 , cell_colors[i](2)/3);
-			}else if (opened_cell.find(i)!=opened_cell.end()){
-				// opened cell
-				glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/2 , cell_colors[i](1)/2 , cell_colors[i](2)/2);
-			}else if (cursor_position_cell!=-1 && neighbors[cursor_position_cell].find(i) != neighbors[cursor_position_cell].end()){
-				// neighbor cell
-				glUniform3f(program.uniform("frag_color"),cell_colors[i](0) +0.2, cell_colors[i](1) +0.2, cell_colors[i](2) +0.2);
-			}else{
-				glUniform3f(program.uniform("frag_color"),cell_colors[i](0) , cell_colors[i](1) , cell_colors[i](2));
-			}
-			
-			glDrawArrays(GL_TRIANGLE_FAN, 0, cells[i].cols());
-
-			// draw the cell boundary
-			glUniform3f(program.uniform("frag_color"),cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
-			glDrawArrays(GL_LINE_LOOP, 0, cells[i].cols());
+				vbo_cell.update(spherical_cell_triangles[i]);
+				program.bindVertexAttribArray("position", vbo_cell);
+				glDrawArrays(GL_TRIANGLES, 0, spherical_cell_triangles[i].cols());
 
 
-			// check mine counts for each cell
-			int mine_number = neighbor_mines[i];
-			// && mine_cells.find(i) == mine_cells.end()
-			if (mine_number>0 && mine_cells.find(i) == mine_cells.end() && opened_cell.find(i)!=opened_cell.end()){
+				
 
-				if (mine_cells.find(i)!=mine_cells.end()){
-					mine_number = 0;
+				if (spherical_mine_cells.find(i)!=spherical_mine_cells.end() && game_over){
+					glUniform3f(program.uniform("frag_color"), 58.0/255.0, 50.0/255.0, 28.0/255.0);
+					glUniform3f(program.uniform("center"),spherical_cell_centers[i](0), spherical_cell_centers[i](1), spherical_cell_centers[i](2));
+					vbo_cell.update(mine_edges * each_number_size_for_each_cell[i][0] * 1.5);
+					glDrawArrays(GL_TRIANGLES, 0, mine_edges.cols());
+				}
+				
+				if (flagged_cells.find(i)!=flagged_cells.end()){
+					glUniform3f(program.uniform("frag_color"), 165.0/255.0, 5.0/255.0, 29.0/255.0);
+					glUniform3f(program.uniform("center"),1.1*spherical_cell_centers[i](0), 1.1*spherical_cell_centers[i](1), 1.1*spherical_cell_centers[i](2));
+					vbo_cell.update(flag_edges * each_number_size_for_each_cell[i][0] * 2);
+					glDrawArrays(GL_TRIANGLES, 0, flag_edges.cols());
+				}
+				Eigen::Matrix4Xf rot_tmp;
+				rot_tmp.resize(4, 4);
+				rot_tmp<<
+				1.0, 0.0, 0.0, 0.0,
+				0.0, 1.0, 0.0, 0.0,
+				0.0, 0.0, 1.0, 0.0,
+				0.0, 0.0, 0.0, 1.0;
+
+				int mine_number = spherical_neighbor_mines[i];
+				// glUniform3f(program.uniform("frag_color"), cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
+
+				if (mine_number>0 && mine_cells.find(i) == mine_cells.end() && opened_cell.find(i)!=opened_cell.end()){
+					if (mine_cells.find(i)!=mine_cells.end()){
+						mine_number = 0;
+					}
+					glUniform3f(program.uniform("frag_color"), cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
+					// draw numbers
+					for (int j=0; j<std::to_string(mine_number).length(); j++){
+						int b = (int)((std::to_string(mine_number))[j]) - 48;
+						vbo_cell.update(all_numbers_edges[b] * each_number_size_for_each_cell[i][j] *0.9);
+						program.bindVertexAttribArray("position", vbo_cell);
+
+
+						glUniformMatrix4fv(program.uniform("rot"), 1, GL_FALSE, rot_tmp.data());
+						Eigen::Vector4f mapped_location = (1+0.05)*rotation*Eigen::Vector4f(spherical_cell_centers[i](0), spherical_cell_centers[i](1), spherical_cell_centers[i](2), 1.0);
+
+						glUniform3f(program.uniform("center"), number_centers_for_each_cell[i][j](0)+ mapped_location(0), number_centers_for_each_cell[i][j](1)+ mapped_location(1), 0+ mapped_location(2));
+						// glUniform3f(program.uniform("center"), number_centers_for_each_cell[i][j](0), number_centers_for_each_cell[i][j](1), number_centers_for_each_cell[i][j](2));
+						glDrawArrays(GL_TRIANGLES, 0, all_numbers_edges[b].cols());
+
+					}
 				}
 
-				glUniform3f(program.uniform("frag_color"), cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
 
 
-				// draw numbers
-				for (int j=0; j<std::to_string(mine_number).length(); j++){
-					glUniform3f(program.uniform("center"),number_centers_for_each_cell[i][j](0), number_centers_for_each_cell[i][j](1), number_centers_for_each_cell[i][j](2));
-					// std::cout<<std::to_string(number)[j];
-					int b = (int)((std::to_string(mine_number))[j]) - 48;
-					vbo_cell.update(all_numbers_edges[b] * each_number_size_for_each_cell[i][j]);
-					glDrawArrays(GL_TRIANGLES, 0, all_numbers_edges[b].cols());
+				// std::cout<<"cell number :"<<i<<std::endl;
+			}
 
+
+
+	
+
+		}else{
+			for (int i=0; i<cells.size(); i++){
+				vbo_cell.update(cells[i]);
+				// std::cout<<i<<std::endl;
+				// std::cout<<cells[i]<<std::endl<<std::endl;
+
+
+				// draw the cell
+				program.bindVertexAttribArray("position", vbo_cell);
+				glUniform3f(program.uniform("center"),0.0, 0.0, 0.0);
+
+				// mouse pressed cell
+				if ((left_clicked_cell == i && left_button_down)){
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/3 , cell_colors[i](1)/3 , cell_colors[i](2)/3);
+				}else if (opened_cell.find(i)!=opened_cell.end()){
+					// opened cell
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0)/2 , cell_colors[i](1)/2 , cell_colors[i](2)/2);
+				}else if (cursor_position_cell!=-1 && neighbors[cursor_position_cell].find(i) != neighbors[cursor_position_cell].end()){
+					// neighbor cell
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0) +0.2, cell_colors[i](1) +0.2, cell_colors[i](2) +0.2);
+				}else if(cursor_position_cell == i){
+					glUniform3f(program.uniform("frag_color"),0.5, 0.5, 0.5);
+				}else{
+					glUniform3f(program.uniform("frag_color"),cell_colors[i](0) , cell_colors[i](1) , cell_colors[i](2));
 				}
-			}
+				
+				glDrawArrays(GL_TRIANGLE_FAN, 0, cells[i].cols());
 
-			if (mine_cells.find(i)!=mine_cells.end() && game_over ){
-				glUniform3f(program.uniform("frag_color"), 58.0/255.0, 50.0/255.0, 28.0/255.0);
-				glUniform3f(program.uniform("center"),cell_centers[i](0), cell_centers[i](1), cell_centers[i](2));
-				vbo_cell.update(mine_edges * each_number_size_for_each_cell[i][0] * 2);
-				glDrawArrays(GL_TRIANGLES, 0, mine_edges.cols());
-			}
-
-			if (flagged_cells.find(i)!=flagged_cells.end()){
-				glUniform3f(program.uniform("frag_color"), 165.0/255.0, 5.0/255.0, 29.0/255.0);
-				glUniform3f(program.uniform("center"),cell_centers[i](0), cell_centers[i](1), cell_centers[i](2)+1.0);
-				vbo_cell.update(flag_edges * each_number_size_for_each_cell[i][0] * 2);
-				glDrawArrays(GL_TRIANGLES, 0, flag_edges.cols());
-			}
-			// std::cout<<std::endl;
+				// draw the cell boundary
+				glUniform3f(program.uniform("frag_color"),cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
+				glDrawArrays(GL_LINE_LOOP, 0, cells[i].cols());
 
 
-			// draw bounding square inside the polygon
-			// glUniform3f(program.uniform("center"),0.0, 0.0, 0.0);
-			// vbo_cell.update(cell_center_squares[i]);
-			// program.bindVertexAttribArray("position", vbo_cell);
-			// glUniform3f(program.uniform("frag_color"),0.0 , 0.0 , 0.0);
-			// glDrawArrays(GL_LINE_LOOP, 0, 4);
+				// check mine counts for each cell
+				int mine_number = neighbor_mines[i];
+				// && mine_cells.find(i) == mine_cells.end()
+				if (mine_number>0 && mine_cells.find(i) == mine_cells.end() && opened_cell.find(i)!=opened_cell.end()){
+
+					if (mine_cells.find(i)!=mine_cells.end()){
+						mine_number = 0;
+					}
+
+					glUniform3f(program.uniform("frag_color"), cell_complementary_colors[i](0) , cell_complementary_colors[i](1) , cell_complementary_colors[i](2));
 
 
+					// draw numbers
+					for (int j=0; j<std::to_string(mine_number).length(); j++){
+						glUniform3f(program.uniform("center"),number_centers_for_each_cell[i][j](0), number_centers_for_each_cell[i][j](1), number_centers_for_each_cell[i][j](2));
+						// std::cout<<std::to_string(number)[j];
+						int b = (int)((std::to_string(mine_number))[j]) - 48;
+						vbo_cell.update(all_numbers_edges[b] * each_number_size_for_each_cell[i][j]);
+						glDrawArrays(GL_TRIANGLES, 0, all_numbers_edges[b].cols());
+
+					}
+				}
+
+				if (mine_cells.find(i)!=mine_cells.end() && game_over ){
+					glUniform3f(program.uniform("frag_color"), 58.0/255.0, 50.0/255.0, 28.0/255.0);
+					glUniform3f(program.uniform("center"),cell_centers[i](0), cell_centers[i](1), cell_centers[i](2));
+					vbo_cell.update(mine_edges * each_number_size_for_each_cell[i][0] * 2);
+					glDrawArrays(GL_TRIANGLES, 0, mine_edges.cols());
+				}
+
+				if (flagged_cells.find(i)!=flagged_cells.end()){
+					glUniform3f(program.uniform("frag_color"), 165.0/255.0, 5.0/255.0, 29.0/255.0);
+					glUniform3f(program.uniform("center"),cell_centers[i](0), cell_centers[i](1), cell_centers[i](2)+1.0);
+					vbo_cell.update(flag_edges * each_number_size_for_each_cell[i][0] * 2);
+					glDrawArrays(GL_TRIANGLES, 0, flag_edges.cols());
+				}
+
+			}	
 		}
 
 

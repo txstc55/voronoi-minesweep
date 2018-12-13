@@ -265,6 +265,9 @@ int have_same_sign(float a, float b, float c){
 }
 
 
+
+
+
 Eigen::Matrix3Xf return_rotation_matrix(float rz, float rx, float ry){
 		rz = PI*rz/180;
 		rx = PI*rx/180;
@@ -485,16 +488,27 @@ bool RayIntersectBox(Eigen::Vector3f center, float rz, float rx, float ry, float
 	return found_intersect;
 }
 
-int orientation(Eigen::Vector3f p1, Eigen::Vector3f p2, Eigen::Vector3f p3) 
+int orientation(Eigen::Vector3f p1, Eigen::Vector3f p2, Eigen::Vector3f p3, Eigen::Vector3f v) 
 { 
-    // See 10th slides from following link for derivation 
-    // of the formula 
-    float val = (p2(1) - p1(1)) * (p3(0) - p2(0)) - 
-              (p2(0) - p1(0)) * (p3(1) - p2(1)); 
+	Eigen::Vector3f N = (p2-p1).cross(p3 - p1);
+	float w = N.dot(p1 - v);
+
+	if (w == 0){
+		return 0;
+	}
+	if (w>0){
+		return 1;
+	}
+	if (w<0){
+		return 2;
+	}
+
+    // float val = (p2(1) - p1(1)) * (p3(0) - p2(0)) - 
+    //           (p2(0) - p1(0)) * (p3(1) - p2(1)); 
   
-    if (val == 0) return 0;  // colinear 
+    // if (val == 0) return 0;  // colinear 
   
-    return (val > 0)? 1: 2; // clock or counterclock wise 
+    // return (val > 0)? 1: 2; // clock or counterclock wise 
 } 
 
 
@@ -611,14 +625,22 @@ void load_all_number(std::vector<Eigen::Matrix3Xf>& all_numbers_edges, std::vect
 
 
 bool LineIntersection(Eigen::Vector3f p1, Eigen::Vector3f p2, Eigen::Vector3f p3, Eigen::Vector3f p4, float& u){
-	// first we need to check if the lines are parallel
-	float base = (p4(1) - p3(1))*(p2(0) - p1(0)) - (p4(0) - p3(0))*(p2(1) - p1(1));
-	if (base == 0){
+	Eigen::Vector3f da = p2 - p1;
+	Eigen::Vector3f db = p4 - p3;
+	Eigen::Vector3f dc = p3 - p1;
+
+	if (abs(dc.dot(da.cross(db))) !=0){
 		return false;
 	}
 
-	float top = (p4(0) - p3(0))*(p1(1) - p3(1)) - (p4(1) - p3(1))*(p1(0) - p3(0));
-	u = top/base;
+	u = dc.cross(db).dot(da.cross(db)) / pow(da.cross(db).norm(), 2);
+	// float base = (p4(1) - p3(1))*(p2(0) - p1(0)) - (p4(0) - p3(0))*(p2(1) - p1(1));
+	// if (base == 0){
+	// 	return false;
+	// }
+
+	// float top = (p4(0) - p3(0))*(p1(1) - p3(1)) - (p4(1) - p3(1))*(p1(0) - p3(0));
+	// u = top/base;
 	if (0<=u && u<=1){
 		return true;
 	}else{
@@ -695,10 +717,10 @@ Eigen::Matrix3Xf GetMaximumSquare(Eigen::Matrix3Xf bounding_box, Eigen::Vector3f
 	}
 
 	tmp.resize(3, 4);
-	top_right = center + u_min * Eigen::Vector3f(sqrt(2) * max_half_length, sqrt(2) * max_half_length, 0.01);
-	top_left = center + u_min * Eigen::Vector3f(-sqrt(2) * max_half_length, sqrt(2) * max_half_length, 0.01);
-	bot_right = center + u_min * Eigen::Vector3f(sqrt(2) * max_half_length, -sqrt(2) * max_half_length, 0.01);
-	bot_left = center + u_min * Eigen::Vector3f(-sqrt(2) * max_half_length, -sqrt(2) * max_half_length, 0.01);
+	top_right = center + u_min * Eigen::Vector3f(sqrt(2) * max_half_length, sqrt(2) * max_half_length, bounding_box.col(0)(2)+0.01);
+	top_left = center + u_min * Eigen::Vector3f(-sqrt(2) * max_half_length, sqrt(2) * max_half_length, bounding_box.col(0)(2)+0.01);
+	bot_right = center + u_min * Eigen::Vector3f(sqrt(2) * max_half_length, -sqrt(2) * max_half_length, bounding_box.col(0)(2)+0.01);
+	bot_left = center + u_min * Eigen::Vector3f(-sqrt(2) * max_half_length, -sqrt(2) * max_half_length, bounding_box.col(0)(2)+0.01);
 
 	// top_right(2) = -0.5;
 	// top_left(2) = -0.5;
@@ -886,23 +908,6 @@ void load_voronoi(std::string file,
 			int square_cell_index = square_cell_partition * row_num + col_num;
 
 
-			// another way to determine the center
-			// which is get the bounding box of the polygon
-			// then get the bounding box's center
-
-			// if (b_point(0)>x_max){
-			// 	x_max = b_point(0);
-			// }
-			// if (b_point(0)<x_min){
-			// 	x_min = b_point(0);
-			// }
-			// if (b_point(1)>y_max){
-			// 	y_max = b_point(1);
-			// }
-			// if (b_point(1)<y_min){
-			// 	y_min = b_point(1);
-			// }
-
 
 			// for each square cell
 			// if one of the boundary points is in that square cell
@@ -921,7 +926,7 @@ void load_voronoi(std::string file,
 		int order = 0;
 
 		while (order==0){
-			order = orientation(cell_boundaries.col(offset), cell_boundaries.col(offset+1), cell_boundaries.col(offset+2));
+			order = orientation(cell_boundaries.col(offset), cell_boundaries.col(offset+1), cell_boundaries.col(offset+2), Eigen::Vector3f(0, 0, 10));
 			offset++;
 		}
 
@@ -1138,4 +1143,265 @@ std::set<int> open_cells(int ind, std::map<int, int> neighbor_mines, std::set<in
 		}
 	}
 	return should_open;
+}
+
+
+Eigen::Matrix3Xf populate_triangle(Eigen::Matrix3Xf t){
+	float thresh = 0.01;
+	Eigen::Vector3f a = t.col(0);
+	Eigen::Vector3f b = t.col(1);
+	Eigen::Vector3f c = t.col(2);
+	if ((b-a).norm()<thresh && (c-b).norm()<thresh && (a-c).norm()<thresh){
+		return t;
+	}
+	double af, bf;
+	Eigen::Vector3f ab = (a+b)/2;
+	Eigen::Vector3f bc = (b+c)/2;
+	Eigen::Vector3f ca = (c+a)/2;
+
+	ab = ab/ab.norm();
+	bc = bc/bc.norm();
+	ca = ca/ca.norm();
+
+
+
+
+	Eigen::Matrix3Xf result_final, result1, result2, result3, result4, t1, t2, t3, t4;
+	t1.resize(3, 3);
+	t2.resize(3, 3);
+	t3.resize(3, 3);
+	t4.resize(3, 3);
+
+	t1<<a, ab, ca;
+	t2<<ab, b, bc;
+	t3<<ca, bc, c;
+	t4<<ab, bc, ca;
+
+	result1 = populate_triangle(t1);
+	result2 = populate_triangle(t2);
+	result3 = populate_triangle(t3);
+	result4 = populate_triangle(t4);
+
+	result_final.resize(3, result1.cols()+result2.cols()+result3.cols()+result4.cols());
+	result_final<<result1, result2, result3, result4;
+	return result_final;
+}
+
+
+void get_polar(Eigen::Vector3f p, double& a, double& b){
+	a = atan2(p(0), p(2)); // phi
+	if (a<0){
+		a += 2*PI;
+	}
+	b = atan2(std::hypot(p(0), p(2)), p(1)); // theta
+	if (b<0){
+		b += 2*PI;
+	}
+	
+
+}
+
+Eigen::Vector3f polar_to_sphere(Eigen::Vector3f p, double a, double b){
+	Eigen::Vector3f tmp;
+	tmp(2) = sin(b)*cos(a);
+	tmp(0) = sin(b)*sin(a);
+	tmp(1) = cos(b);
+
+	// if (p(0)<0)
+	// 	tmp(0)*=-1;
+	// if (p(1)<0)
+	// 	tmp(1)*=-1;
+	// if (p(2)<0)
+	// 	tmp(2)*=-1;
+
+	return tmp;
+}
+
+Eigen::Matrix3Xf GetMaximumSphericalSquare(Eigen::Matrix3Xf bounding_box, Eigen::Vector3f center){
+	float min_d = 3;
+	for (int i=0; i<bounding_box.cols(); i++){
+		Eigen::Vector3f p1 = bounding_box.col(i);
+		Eigen::Vector3f p2 = bounding_box.col((i+1)%bounding_box.cols());
+		Eigen::Vector3f l1 = p2 - p1;
+		Eigen::Vector3f l2 = center - p1;
+		float d = (l1.cross(l2)).norm()/l1.norm();
+		if (d<min_d){
+			min_d = d;
+		}
+	}
+	Eigen::Matrix3Xf square;
+	square.resize(3, 4);
+	square.col(0) = Eigen::Vector3f(0, 0, 0) + min_d*Eigen::Vector3f(1, 1, 0);
+	square.col(1) = Eigen::Vector3f(0, 0, 0) + min_d*Eigen::Vector3f(-1, 1, 0);
+	square.col(2) = Eigen::Vector3f(0, 0, 0) + min_d*Eigen::Vector3f(-1, -1, 0);
+	square.col(3) = Eigen::Vector3f(0, 0, 0) + min_d*Eigen::Vector3f(1, -1, 0);
+	return square;
+}
+
+
+
+
+void load_spherical_voronoi(std::string file,
+                            int number_of_mines,
+                            std::vector<Eigen::Matrix3Xf>& spherical_cells, 
+                            std::vector<Eigen::Matrix3Xf>& spherical_cell_triangles,
+                            std::vector<Eigen::Vector3f>& spherical_cell_centers,
+                            std::vector<Eigen::Vector3f>& spherical_cell_centers_unnormed,
+                            std::vector<Eigen::Matrix3Xf>& sphere_center_squares,
+                            std::map<int, std::set<int> >& neighbors,
+                            std::set<int>& spherical_mine_cells,
+                            std::map<int, int>& spherical_neighbor_mines,
+                            std::map<int, std::set<int> >& spherical_layer_maps){
+	Eigen::Matrix3Xf spherical_cell_points;
+	std::ifstream shape_in(file);
+	int num_vert, num_face;
+	shape_in>>num_vert>>num_face;
+	std::map<int, std::set<int> > point_to_cell;
+
+	for (int i=0; i<num_vert; i++){
+		float x, y, z;
+		shape_in>>x>>y>>z;
+		std::set<int> tmp;
+		if (y>1){
+			y = 1.0;
+		}
+		if (y<-1){
+			y = -1.0;
+		}
+		if (x<-1){
+			x = -1.0;
+		}
+		if (x>1){
+			x = 1.0;
+		}
+		if (z>1.0){
+			z = 1.0;
+		}
+		if (z<-1.0){
+			z = -1.0;
+		}
+
+		Eigen::Vector3f point(x, y, z);
+		spherical_cell_points.conservativeResize(3, spherical_cell_points.cols()+1);
+		spherical_cell_points.col(spherical_cell_points.cols()-1) = point;
+		point_to_cell.insert(std::make_pair(i, tmp));
+	}
+
+	std::string dummy_line;
+	getline(shape_in, dummy_line);
+
+	for (int i=0; i<num_face; i++){
+		Eigen::Matrix3Xf cell_boundaries;
+		std::string s;
+		getline(shape_in, s);
+		Eigen::Vector3f cell_center = Eigen::Vector3f(0.0, 0.0, 0.0);
+		int n=0;
+
+		std::istringstream iss(s);
+
+		for(std::string s; iss >> s; ){
+			int b = std::stoi(s);
+			// std::cout<<b<<" ";
+			Eigen::Vector3f b_point = spherical_cell_points.col(b);
+			cell_boundaries.conservativeResize(3, cell_boundaries.cols()+1);
+			cell_boundaries.col(cell_boundaries.cols()-1) = b_point;
+			point_to_cell[b].insert(i);
+			cell_center+=b_point;
+			n++;
+		}
+		// std::cout<<std::endl;
+
+
+		// make them conter clockwise
+		int offset = 0;
+		int order = 0;
+		while (order == 0){
+			order = orientation(cell_boundaries.col(offset), cell_boundaries.col(offset+1), cell_boundaries.col(offset+2), Eigen::Vector3f(0.0, 0.0, 0.0));
+			offset++;
+		}
+		if (order == 2){
+			Eigen::Matrix3Xf flipped;
+			flipped.resize(3, cell_boundaries.cols());
+			for (int i=0; i<cell_boundaries.cols(); i++){
+				flipped.col(i) = cell_boundaries.col(cell_boundaries.cols()-1-i);
+			}
+			cell_boundaries = flipped;
+		}
+
+		cell_center = cell_center / n;
+
+		Eigen::Vector3f cell_center_unnormed = cell_center;
+
+		cell_center = cell_center / cell_center.norm();
+
+		spherical_cell_centers.push_back(cell_center);
+		// spherical_cell_centers_unnormed.push_back(cell_center_unnormed);
+		std::set<int> tmp;
+		neighbors.insert(std::make_pair(i, tmp));
+		spherical_cells.push_back(cell_boundaries);
+
+		Eigen::Matrix3Xf cell_triangles;
+		for (int k=0; k<cell_boundaries.cols(); k++){
+			Eigen::Matrix3Xf tmp;
+			tmp.resize(3, 3);
+			tmp<<cell_center, cell_boundaries.col(k), cell_boundaries.col((k+1)%cell_boundaries.cols());
+			Eigen::Matrix3Xf triangles = populate_triangle(tmp);
+
+			Eigen::Matrix3Xf tmp_result;
+			tmp_result.resize(3, cell_triangles.cols()+triangles.cols());
+			tmp_result<<cell_triangles, triangles;
+			cell_triangles = tmp_result;
+
+		}
+		spherical_cell_triangles.push_back(cell_triangles);
+
+
+		Eigen::Matrix3Xf square;
+		square = GetMaximumSphericalSquare(cell_boundaries, cell_center_unnormed);
+		sphere_center_squares.push_back(square);
+
+
+	}
+
+	while(spherical_mine_cells.size()<number_of_mines){
+		int random_cell_number = rand()%num_face;
+		spherical_mine_cells.insert(random_cell_number);
+	}
+
+	for (auto it = point_to_cell.begin(); it!=point_to_cell.end(); ++it){
+		int point_index = it->first;
+		std::set<int> cell_index_set = it->second;
+
+		for (auto it2 = cell_index_set.begin(); it2!=cell_index_set.end(); ++it2){
+			int cell_ind = *it2;
+			neighbors[cell_ind].insert(cell_index_set.begin(), cell_index_set.end());
+		}
+	}
+
+	for (int i=0; i<num_face; i++){
+		neighbors[i].erase(i);
+		spherical_neighbor_mines.insert(std::make_pair(i, 0));
+		for (auto it = neighbors[i].begin(); it!=neighbors[i].end(); ++it){
+			if (spherical_mine_cells.find(*it)!=spherical_mine_cells.end()){
+				spherical_neighbor_mines[i]+=1;
+			}
+		}
+	}
+
+	for (int i=0; i<num_face; i++){
+		float x, y, z;
+		shape_in>>x>>y>>z;
+		// std::cout<<"x: "<<x<<" y: "<<y<<" z: "<<z<<std::endl;
+		Eigen::Vector3f tmp = Eigen::Vector3f(x, y, z);
+		spherical_cell_centers_unnormed.push_back(tmp/tmp.norm());
+
+	}
+
+
+
+
+
+
+
+
 }

@@ -273,12 +273,12 @@ bool RayIntersectsTriangle(Eigen::Vector3f rayOrigin,
 bool RayIntersectBox(Eigen::Vector3f center, float rot_z, float rot_x, float rot_y, float scale, Eigen::Matrix3Xf cube, Eigen::Vector3f rayOrigin, Eigen::Vector3f rayVector, float& t);
 
 
-int orientation(Eigen::Vector3f p1, Eigen::Vector3f p2, Eigen::Vector3f p3);
+int orientation(Eigen::Vector3f p1, Eigen::Vector3f p2, Eigen::Vector3f p3, Eigen::Vector3f v);
 
 // given a color, get the complementary color
 Eigen::Vector3f complementary_color(Eigen::Vector3f c);
 
-
+// render text
 void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
 
@@ -293,6 +293,9 @@ void load_all_number(std::vector<Eigen::Matrix3Xf>& all_numbers_edges, std::vect
 // get the square that centers at the center of the polygon
 // which has maximum area, and does not go out of the polygon
 Eigen::Matrix3Xf GetMaximumSquare(Eigen::Matrix3Xf bounding_box, Eigen::Vector3f center);
+
+
+Eigen::Matrix3Xf GetMaximumSphericalSquare(Eigen::Matrix3Xf bounding_box, Eigen::Vector3f center);
 
 // get the centers and the size of numbers
 // given a square box
@@ -322,17 +325,48 @@ void load_voronoi(std::string file,
                   std::map<int, int>& neighbor_mines,
                   std::map<int, std::set<int> >& square_cell_maps);
 
+void load_spherical_voronoi(std::string file,
+                            int number_of_mines,
+                            std::vector<Eigen::Matrix3Xf>& spherical_cells, 
+                            std::vector<Eigen::Matrix3Xf>& spherical_cell_triangles,
+                            std::vector<Eigen::Vector3f>& spherical_cell_centers,
+                            std::vector<Eigen::Vector3f>& spherical_cell_centers_unnormed, 
+                            std::vector<Eigen::Matrix3Xf>& sphere_center_squares,
+                            std::map<int, std::set<int> >& neighbors,
+                            std::set<int>& spherical_mine_cells,
+                            std::map<int, int>& spherical_neighbor_mines,
+                            std::map<int, std::set<int> >& spherical_layer_maps);
 
 
+// check if a point is inside a polygon
 bool PointInPolygon(Eigen::Matrix3Xf cell, Eigen::Vector3f center, float x, float y);
 
+
+// load a shape, mainly flag and mine
 void load_shape(std::string file,
                Eigen::Matrix3Xf& shape_edges);
 
-
+// when click on a cell, check what cells can be opened
 std::set<int> open_cells(int ind, std::map<int, int> neighbor_mines, std::set<int> mine_cells, std::map<int, std::set<int> > neighbors, std::set<int> flagged_cells);
 
+// generate a random float number
 float RandomFloat(float a, float b);
+
+
+// populate a region with triangles
+Eigen::Matrix3Xf populate_triangle(Eigen::Matrix3Xf t);
+
+
+// get the polar coordinate of a point
+// a is the angle on z plane
+// be is the angle it raises on the z plane
+void get_polar(Eigen::Vector3f p, double& a, double& b);
+
+// given the polar coordinate of a point
+// return the position on a sphere
+// assume that the center is 0 and the radius is 1
+Eigen::Vector3f polar_to_sphere(Eigen::Vector3f p, double a, double b);
+
 
 #define check_gl_error() _check_gl_error(__FILE__,__LINE__)
 #endif
