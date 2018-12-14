@@ -449,7 +449,7 @@ void sphere_mouse_button_callback(GLFWwindow* window, int button, int action, in
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS){
 		left_button_down = 1;
 
-		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+		if (pow(xworld, 2) + pow(yworld, 2)<=1){
 			float t_min = 2;
 			for (int i=0; i<spherical_cells.size(); i++){
 
@@ -472,7 +472,7 @@ void sphere_mouse_button_callback(GLFWwindow* window, int button, int action, in
 	}
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE){
 		left_button_down = 0;
-		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+		if (pow(xworld, 2) + pow(yworld, 2)<=1){
 			int ind = 2;
 			float t_min = 2;
 			for (int i=0; i<spherical_cells.size(); i++){
@@ -517,7 +517,7 @@ void sphere_mouse_button_callback(GLFWwindow* window, int button, int action, in
 		right_button_down = 1;
 
 
-		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+		if (pow(xworld, 2) + pow(yworld, 2)<=1){
 			float t_min = 2;
 			for (int i=0; i<spherical_cells.size(); i++){
 
@@ -540,7 +540,7 @@ void sphere_mouse_button_callback(GLFWwindow* window, int button, int action, in
 
 	if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE){
 		right_button_down = 0;
-		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+		if (pow(xworld, 2) + pow(yworld, 2)<=1){
 			int ind = -2;
 			float t_min = 2;
 			for (int i=0; i<spherical_cells.size(); i++){
@@ -619,7 +619,7 @@ void sphere_mouse_cursor_position_callback(GLFWwindow* window, double xpos, doub
 
 		// here we will just use the property of delaunay triangle
 		// to determine where we clicked
-		if (xworld>=-1 && xworld<=1 && yworld>=-1 && yworld<=1){
+		if (pow(xworld, 2) + pow(yworld, 2)<=1){
 			float t_min = 2;
 			for (int i=0; i<spherical_cells.size(); i++){
 
@@ -643,6 +643,13 @@ void sphere_mouse_cursor_position_callback(GLFWwindow* window, double xpos, doub
 
 
 }
+
+
+
+
+
+
+
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -1289,7 +1296,7 @@ int main()
 					vbo_cell.update(mine_edges * each_number_size_for_each_cell[i][0] * 1.5);
 					glDrawArrays(GL_TRIANGLES, 0, mine_edges.cols());
 				}
-				
+
 				if (flagged_cells.find(i)!=flagged_cells.end()){
 					glUniform3f(program.uniform("frag_color"), 165.0/255.0, 5.0/255.0, 29.0/255.0);
 					glUniform3f(program.uniform("center"),1.1*spherical_cell_centers[i](0), 1.1*spherical_cell_centers[i](1), 1.1*spherical_cell_centers[i](2));
