@@ -97,7 +97,20 @@ However, we can give a pretty good upper bound for each cell:
 
 This is the fourth challenge, and again, the solution seems to be quite easy and trivial, but it was not that easy to come up with it.
 
+Now comes the last problem: how do we determine if a click lands in a spherical cell.
 
+Well there are couple ways to do it: we can create triangles inside cell and determine ray triangle intersection, we can find the contact point on the plane of the cell, and determine if that point is inside the polygon. All of them needs some kind of ray mesh intersection.
+
+The thing is, if we keep thinking this as an ray intersection problem, we can never jump out of the box. As a matter of fact, we can use the property of voronoi diagram: every point inside a cell are guaranteed to be closest to its own site.
+
+So here is the algorithm:
+1. For each click, we will get x and y position. We calculate z = sqrt(1 - x^2 - y^2)
+2. For each site, calculate distance from the site point
+3. The site with minimum distance will be our target
+
+Easy right? And this is very fast since it is just three lines of code. We can make it even faster by cutting cells by their polar coordinates. But it is unnecessary here honestly.
+
+And with all these parts set up, everything else is just game logic.
 
 
 
@@ -121,3 +134,13 @@ When you move your mouse on a grid, the grid will turn to gray and its neighbors
 To win the game, simply open all the cells that are not dangerous and flag the mines.
 
 For spherical voronoi minesweep, you can drag the mouse to rotate the sphere
+
+
+## Copyright and stuff
+https://www.1001fonts.com/digital-7-font.html for font that was used for timer
+
+https://free3d.com/3d-model/american-flag-v1--414401.html for flag
+
+https://free3d.com/3d-model/boat-mine-v1--471727.html for mine
+
+The number meshes are generated through blender by myself
