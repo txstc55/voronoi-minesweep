@@ -7,13 +7,13 @@ Clone or fork this project, if you cloned this project to your local disk, remem
 
 After you got this project, make a build directory and cd to build, and type
 
-``bash
+``
 cmake -DCMAKE_BUILD_TYPE=Release ../
 ``
 
 Then make the project
 
-``bash
+``
 make
 ``
 And you should get the playble binary file
