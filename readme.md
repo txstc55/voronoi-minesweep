@@ -16,7 +16,10 @@ Then make the project
 ``
 make
 ``
+
 And you should get the playble binary file
+
+You will first be asked to choose a mode. Please only enter 'g' or some other character (just one character) to pick mode. Then you will be asked to enter the number of cells and the number of mines. Please be a rational person and enter a number not something else or you will crush the game.
 
 ## The Idea 
 *"Sometimes, the simplest ideas can be really hard to implement"* -- By myself
