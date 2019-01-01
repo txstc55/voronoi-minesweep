@@ -10,6 +10,4 @@
 [submodule "ext/freetype2"]
 	path = ext/freetype2
 	url = git://git.sv.nongnu.org/freetype/freetype2.git
-[submodule "ext/glfw"]
-	path = ext/glfw
-	url = https://github.com/wjakob/glfw/tree/30306e54705c3adae9fe082c816a3be71963485c
+
