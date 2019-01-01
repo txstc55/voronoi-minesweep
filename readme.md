@@ -1,5 +1,22 @@
 # Voronoi Minesweep
 
+This project is initially a final project for NYU Computer Graphics class. The repository is forked from a private repository which was created for that project.
+
+## How to play
+Clone or fork this project, if you cloned this project to your local disk, remember to use --recursive to get every dependency for this project. You will need cmake to build and run this game.
+
+After you got this project, make a build directory and cd to build, and type
+
+``bash
+cmake -DCMAKE_BUILD_TYPE=Release ../
+``
+
+Then make the project
+
+``bash
+make
+``
+And you should get the playble binary file
 
 ## The Idea 
 *"Sometimes, the simplest ideas can be really hard to implement"* -- By myself
